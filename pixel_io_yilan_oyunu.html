@@ -1,0 +1,1404 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>PixelChaos Arena — Roguelite Economy Build</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Palette */
+      --bg: #0b0d17;
+      --panel-bg: #151828;
+      --panel-border: #2a2f4c;
+      --text-main: #e0e5ff;
+      --text-muted: #8b93b8;
+      
+      /* Accents */
+      --neon-green: #39ff14;
+      --neon-blue: #00f0ff;
+      --neon-yellow: #ffe600;
+      --neon-red: #ff003c;
+      --neon-purple: #b000ff;
+      --neon-orange: #ff6a00;
+
+      /* Rarities */
+      --rarity-common: #a0aab5;
+      --rarity-rare: #0088ff;
+      --rarity-epic: #aa00ff;
+      --rarity-legend: #ffcc00;
+      --rarity-mythic: #ff0055;
+
+      /* UI Depths */
+      --shadow-color: #05060a;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100%; overflow: hidden; }
+    
+    body {
+      font-family: 'VT323', monospace;
+      color: var(--text-main);
+      background: var(--bg);
+      background-image: 
+        radial-gradient(circle at center, rgba(0, 240, 255, 0.05) 0%, transparent 70%),
+        linear-gradient(rgba(11, 13, 23, 1) 0%, rgba(5, 6, 10, 1) 100%);
+      image-rendering: pixelated;
+      font-size: 22px;
+      user-select: none;
+    }
+
+    /* Pixel Fonts */
+    h1, h2, h3, .pixel-font, .btn, .stat b, .hot b, .price {
+      font-family: 'Press Start 2P', monospace;
+    }
+
+    /* CRT Overlay */
+    .scanlines {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      background-size: 100% 4px, 3px 100%;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Pixel Borders & Containers */
+    .pixel-box {
+      background: var(--panel-bg);
+      border: 4px solid var(--panel-border);
+      box-shadow: 6px 6px 0px var(--shadow-color);
+      position: relative;
+    }
+    
+    .pixel-box::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    /* Fullscreen Layout */
+    .shell {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    /* Buttons */
+    .btnrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btnrow.single { grid-template-columns: 1fr; }
+    .btn {
+      border: 4px solid #fff;
+      background: var(--neon-green);
+      color: #000;
+      font-size: 12px;
+      padding: 14px 10px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: inset -4px -4px 0px rgba(0,0,0,0.3), 4px 4px 0px var(--shadow-color);
+      transition: transform 0.1s, box-shadow 0.1s;
+      text-align: center;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:active {
+      transform: translate(4px, 4px);
+      box-shadow: inset -2px -2px 0px rgba(0,0,0,0.3), 0px 0px 0px var(--shadow-color);
+    }
+    .btn.alt { background: var(--neon-blue); border-color: #dffffa; }
+    .btn.warn { background: var(--neon-yellow); border-color: #fffde0; }
+    .btn.danger { background: var(--neon-red); border-color: #ffcccc; color: white; }
+
+    /* Game Area */
+    .game {
+      position: relative;
+      background: #000;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      box-shadow: inset 0 0 100px rgba(0,0,0,1);
+    }
+    canvas {
+      width: 100%; height: 100%;
+      display: block;
+      background: #080a12;
+    }
+
+    /* Top Bars (HP / XP) */
+    .top-bars {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 5;
+      width: 400px;
+      max-width: 90vw;
+    }
+    .hud-bar-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(11, 13, 23, 0.85);
+      border: 2px solid var(--panel-border);
+      padding: 6px 12px;
+      box-shadow: 4px 4px 0 #000;
+    }
+    .hud-bar-box .bar-label {
+      color: #fff; font-size: 14px; width: 60px; font-family: 'Press Start 2P', monospace;
+      text-shadow: 2px 2px 0 #000;
+    }
+    .hud-bar-box .bar-bg {
+      flex: 1; height: 16px; background: #000; border: 2px solid #222; position: relative;
+    }
+    .hud-bar-box .bar-fill {
+      height: 100%; transition: width 0.2s ease;
+    }
+    .hud-bar-box .bar-val {
+      color: #fff; font-size: 10px; width: 70px; text-align: right; font-family: 'Press Start 2P', monospace;
+    }
+
+    /* Live HUD Overlay */
+    .live-hud {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      gap: 12px;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .live-hud-box {
+      background: rgba(11, 13, 23, 0.85);
+      border: 2px solid var(--panel-border);
+      padding: 10px 14px;
+      color: var(--text-muted);
+      font-size: 18px;
+      box-shadow: 4px 4px 0 #000;
+      backdrop-filter: blur(4px);
+    }
+    .live-hud-box b {
+      color: var(--text-main);
+      margin-left: 6px;
+      font-size: 18px;
+    }
+    .live-hud-box.coin b { color: var(--neon-yellow); text-shadow: 0 0 5px var(--neon-yellow); }
+
+    /* Top right status */
+    .top-status {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.8);
+      border: 2px solid var(--panel-border);
+      padding: 10px;
+      font-size: 16px;
+      color: #aaa;
+      box-shadow: 4px 4px 0 #000;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .top-status strong { color: var(--neon-blue); }
+
+    /* Hotbar */
+    .hotbar {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      z-index: 5;
+    }
+    .hot {
+      width: 64px; height: 64px;
+      background: rgba(11, 13, 23, 0.85);
+      border: 4px solid var(--panel-border);
+      box-shadow: 4px 4px 0 #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: var(--text-muted);
+      position: relative;
+    }
+    .hot b { font-size: 16px; color: #fff; margin-bottom: 4px; }
+    .hot.ready { border-color: var(--neon-green); }
+    .hot.cool::after {
+      content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+      background: rgba(255, 0, 60, 0.4);
+      height: var(--cd, 0%);
+      transition: height 0.1s linear;
+    }
+
+    /* Floating Menu Btn */
+    .menuBtn {
+      position: absolute;
+      right: 20px;
+      bottom: 30px;
+      z-index: 6;
+      font-size: 12px;
+      padding: 12px;
+    }
+
+    /* Screens / Modals */
+    .screen {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 6, 10, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      opacity: 1;
+      transition: opacity 0.2s;
+    }
+    .screen.hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .modal {
+      width: min(900px, 95%);
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 30px;
+      text-align: left;
+    }
+    .modal::-webkit-scrollbar { width: 8px; }
+    .modal::-webkit-scrollbar-thumb { background: var(--panel-border); }
+    
+    .modal h2 {
+      color: var(--neon-green);
+      font-size: 24px;
+      text-shadow: 3px 3px 0 #000;
+      margin: 0 0 10px 0;
+      text-align: center;
+    }
+    .modal > p {
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    /* Pause Overlay */
+    .pause-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(3px);
+      z-index: 15;
+      display: none;
+    }
+    .pause-overlay.show { display: flex; }
+    .pause-overlay h1 {
+      font-size: 48px;
+      color: var(--neon-yellow);
+      text-shadow: 4px 4px 0 #000, 0 0 20px var(--neon-yellow);
+      margin-bottom: 20px;
+      letter-spacing: 4px;
+    }
+
+    /* Menu Cards */
+    .menuGrid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .menuCard {
+      background: rgba(0,0,0,0.4);
+      border: 4px solid var(--panel-border);
+      padding: 20px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      color: var(--text-main);
+      box-shadow: 4px 4px 0 #000;
+    }
+    .menuCard:hover {
+      border-color: var(--neon-blue);
+      transform: translateY(-5px);
+      box-shadow: 4px 9px 0 #000, 0 0 15px rgba(0, 240, 255, 0.3);
+    }
+    .menuCard b {
+      display: block;
+      color: var(--neon-blue);
+      font-size: 14px;
+      margin-bottom: 12px;
+      font-family: 'Press Start 2P', monospace;
+      line-height: 1.4;
+    }
+    .menuCard span { font-size: 18px; color: var(--text-muted); line-height: 1.4; display: block;}
+    .menuCard strong { color: var(--neon-yellow); font-size: 20px; }
+
+    /* Upgrade Cards (Level Up) */
+    .cards { z-index: 25; }
+    .cardWrap h2 {
+      font-size: 20px; color: var(--neon-orange); text-shadow: 2px 2px 0 #000; margin-bottom: 20px; text-align: center;
+    }
+    .upgradeGrid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .upgrade {
+      background: #111424;
+      border: 4px solid var(--panel-border);
+      padding: 20px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.8), 6px 6px 0 #000;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .upgrade::before {
+      content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 4px;
+      background: linear-gradient(90deg, var(--neon-purple), var(--neon-blue));
+    }
+    .upgrade:hover {
+      border-color: var(--neon-purple);
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(176, 0, 255, 0.4), 8px 8px 0 #000;
+    }
+    .upgrade .icon { font-size: 40px; margin-bottom: 15px; }
+    .upgrade .icon img { width: 80px; height: 80px; image-rendering: pixelated; }
+    .hud-icon { width: 24px; height: 24px; image-rendering: pixelated; vertical-align: middle; }
+    .upgrade b { color: var(--neon-purple); font-size: 14px; display: block; margin-bottom: 10px; font-family: 'Press Start 2P', monospace; line-height: 1.4; }
+    .upgrade p { color: #ccc; font-size: 18px; margin: 0; line-height: 1.4; }
+    .upgrade em { display: block; margin-top: 15px; color: var(--neon-yellow); font-size: 14px; font-style: normal; }
+
+    /* Shop & Inventory Grid */
+    .shopGrid, .invGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+      max-height: 60vh;
+      overflow-y: auto;
+      padding-right: 10px;
+    }
+    .shopGrid::-webkit-scrollbar, .invGrid::-webkit-scrollbar { width: 6px; }
+    .shopGrid::-webkit-scrollbar-thumb, .invGrid::-webkit-scrollbar-thumb { background: var(--panel-border); }
+
+    .shopItem, .invItem {
+      background: rgba(0,0,0,0.5);
+      border: 4px solid var(--panel-border);
+      padding: 16px;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 4px 4px 0 #000;
+      transition: transform 0.1s, border-color 0.2s;
+    }
+    .shopItem:hover, .invItem:hover { transform: translateY(-3px); }
+    .shopItem b, .invItem b {
+      display: block; margin-bottom: 8px; color: var(--text-main); font-size: 12px; font-family: 'Press Start 2P', monospace;
+    }
+    .shopItem small, .invItem small { color: var(--text-muted); font-size: 16px; display: block; margin-bottom: 10px; line-height: 1.3;}
+    .price { color: var(--neon-yellow); font-size: 14px; text-shadow: 1px 1px 0 #000; }
+    
+    /* Rarity Borders */
+    .rarity-common { border-color: var(--rarity-common); }
+    .rarity-common:hover { box-shadow: 0 0 10px var(--rarity-common), 4px 4px 0 #000; }
+    .rarity-rare { border-color: var(--rarity-rare); }
+    .rarity-rare:hover { box-shadow: 0 0 15px var(--rarity-rare), 4px 4px 0 #000; }
+    .rarity-epic { border-color: var(--rarity-epic); }
+    .rarity-epic:hover { box-shadow: 0 0 15px var(--rarity-epic), 4px 4px 0 #000; }
+    .rarity-legend { border-color: var(--rarity-legend); }
+    .rarity-legend:hover { box-shadow: 0 0 15px var(--rarity-legend), 4px 4px 0 #000; }
+    .rarity-mythic { border-color: var(--rarity-mythic); }
+    .rarity-mythic:hover { box-shadow: 0 0 15px var(--rarity-mythic), 4px 4px 0 #000; }
+
+    /* Toast Notification */
+    .toast {
+      position: absolute;
+      top: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--neon-blue);
+      color: #000;
+      border: 4px solid #fff;
+      padding: 12px 20px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 10px;
+      box-shadow: 6px 6px 0 #000;
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .toast.show { opacity: 1; }
+
+    /* Mobile Controls */
+    .mobilePad {
+      display: none;
+      position: absolute;
+      right: 20px;
+      bottom: 100px;
+      grid-template-columns: 60px 60px 60px;
+      grid-template-rows: 60px 60px 60px;
+      gap: 10px;
+      z-index: 10;
+      opacity: 0.7;
+    }
+    .padBtn {
+      background: rgba(11, 13, 23, 0.8);
+      border: 4px solid var(--panel-border);
+      color: var(--text-main);
+      font-size: 24px;
+      box-shadow: 2px 2px 0 #000;
+    }
+    .padBtn:active { background: var(--panel-border); }
+    .padBtn:nth-child(1) { grid-column: 2; }
+    .padBtn:nth-child(2) { grid-column: 1; grid-row: 2; }
+    .padBtn:nth-child(3) { grid-column: 2; grid-row: 2; font-size: 16px;} /* Pause */
+    .padBtn:nth-child(4) { grid-column: 3; grid-row: 2; }
+    .padBtn:nth-child(5) { grid-column: 2; grid-row: 3; }
+
+    /* Media Queries */
+    @media(max-width: 1000px) {
+      body { overflow: hidden; }
+      .top-bars { top: 60px; width: 90vw; }
+      .live-hud { flex-wrap: wrap; top: 10px; left: 10px; gap: 6px;}
+      .live-hud-box { padding: 6px 10px; font-size: 14px;}
+      .top-status { display: none; }
+      .hotbar { bottom: 10px; transform: scale(0.8) translateX(-60%); left: 50%; transform-origin: left bottom;}
+      .menuBtn { bottom: 10px; }
+      .modal { padding: 15px; }
+      .menuGrid, .upgradeGrid { grid-template-columns: 1fr; }
+      .mobilePad { display: grid; }
+    }
+  </style>
+</head>
+<body>
+<div class="scanlines"></div>
+
+<main class="shell" id="shell">
+  <!-- Game Area & Overlays -->
+  <section class="game">
+    
+    <!-- Canvas -->
+    <canvas id="game"></canvas>
+    
+    <!-- HUD: Bars (HP/XP) -->
+    <div class="top-bars" id="topBars" style="display: none;">
+      <div class="hud-bar-box">
+        <span class="bar-label" style="color: var(--neon-blue);">LVL <span id="level">1</span></span>
+        <div class="bar-bg"><div class="bar-fill" id="xpBar" style="background: var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue);"></div></div>
+        <span class="bar-val" id="xpTxt">0/100</span>
+      </div>
+      <div class="hud-bar-box">
+        <span class="bar-label" style="color: var(--neon-green);">HP</span>
+        <div class="bar-bg"><div class="bar-fill" id="hpBar" style="background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green);"></div></div>
+        <span class="bar-val" id="hpTxt">100/100</span>
+      </div>
+    </div>
+
+    <!-- HUD: Live Stats -->
+    <div class="live-hud" id="liveHud" style="display: none;">
+      <div class="live-hud-box"><img src="https://raw.githubusercontent.com/umuttis21-dev/PixelChaos-Arena-mage-Asset/main/skull_icon.png" class="hud-icon"> Dalga <b id="liveWave">1</b></div>
+      <div class="live-hud-box"><img src="https://raw.githubusercontent.com/umuttis21-dev/PixelChaos-Arena-mage-Asset/main/star.png" class="hud-icon"> Skor <b id="liveScore">0</b></div>
+      <div class="live-hud-box coin"><img src="https://raw.githubusercontent.com/umuttis21-dev/PixelChaos-Arena-mage-Asset/main/coin_icon.png" class="hud-icon"> Coin <b id="liveCoins">0</b></div>
+      <div class="live-hud-box"><img src="https://raw.githubusercontent.com/umuttis21-dev/PixelChaos-Arena-mage-Asset/main/crossed_swords_icon.png" class="hud-icon"> Kill <b id="liveKills">0</b></div>
+      <div class="live-hud-box"><img src="https://raw.githubusercontent.com/umuttis21-dev/PixelChaos-Arena-mage-Asset/main/purple_gem_icon.png" class="hud-icon"> Çanta <b id="liveItems">0</b></div>
+    </div>
+    
+    <!-- HUD: Top Right Status -->
+    <div class="top-status" id="topStatus" style="display: none;">
+      Durum: <strong id="status">Oyunda</strong><br>
+      <span style="font-size:12px;color:#777;margin-top:6px;display:block;">[SPACE] Duraklat</span>
+    </div>
+    
+    <!-- Hotbar -->
+    <div class="hotbar" id="hotbar" style="display: none;">
+      <div class="hot ready" id="h1"><b>1</b><span>Nova</span></div>
+      <div class="hot ready" id="h2"><b>2</b><span>Kalkan</span></div>
+      <div class="hot ready" id="h3"><b>3</b><span>Drone</span></div>
+      <div class="hot ready" id="h4"><b>4</b><span>Market</span></div>
+    </div>
+
+    <!-- Pause Overlay -->
+    <div class="pause-overlay" id="pauseOverlay">
+      <h1>DURAKLATILDI</h1>
+      <p style="font-family:'Press Start 2P', monospace; font-size:12px; color:#fff;">Devam etmek için [SPACE] veya [P] tuşuna bas</p>
+      <div class="btnrow" style="margin-top: 20px;">
+        <button class="btn alt" id="resumeBtn">DEVAM ET</button>
+        <button class="btn warn" id="quitBtn">MENÜYE DÖN (KAYDET)</button>
+      </div>
+    </div>
+
+    <!-- Main Menu Screen -->
+    <div class="screen" id="mainScreen">
+      <div class="modal pixel-box">
+        <h2>PIXELCHAOS ARENA</h2>
+        <p>100 dalgalık hardcore pixel roguelite deneyimi. Hayatta kal, eşyaları topla, sat ve güçlen.</p>
+        <div class="menuGrid">
+          <div class="menuCard" id="menuStart">
+            <b>OYUNA BAŞLA</b>
+            <span>Dalga 1'den başla, yeteneklerini seç ve build kur.</span>
+          </div>
+          <div class="menuCard" id="menuShop">
+            <b>KALICI MARKET</b>
+            <span>Eşyaları sat ve kalıcı güçlendirmeler al.<br><br>Bakiye: <strong id="menuCoins">0</strong></span>
+          </div>
+          <div class="menuCard" id="menuInv">
+            <b style="color: var(--neon-purple);">ÇANTA / DROPLAR</b>
+            <span>Düşen eşyaları görüntüle ve sat.<br><br>Eşya: <strong style="color: #fff;" id="menuItems">0</strong></span>
+          </div>
+          <div class="menuCard" id="menuLoad">
+            <b style="color: var(--neon-green);">KAYITTAN DEVAM</b>
+            <span>Tarayıcıya kaydedilmiş ekonomini geri yükle.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shop Screen -->
+    <div class="screen hide" id="shopScreen">
+      <div class="modal pixel-box">
+        <h2>KALICI MARKET</h2>
+        <p>Coinlerinle sonraki run'ları etkileyecek kalıcı güçler satın al.</p>
+        <div class="shopGrid" id="shopGrid"></div>
+        <div class="btnrow" style="margin-top:20px;">
+          <button class="btn alt" id="closeShop">Geri Dön</button>
+          <button class="btn warn" id="sellAll">Tümünü Sat & Coin Al</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventory Screen -->
+    <div class="screen hide" id="invScreen">
+      <div class="modal pixel-box">
+        <h2>ÇANTA / DROPLAR</h2>
+        <p>Düşmanlardan düşen eşyalar burada birikir. Üstüne tıklayarak satabilirsin.</p>
+        <div class="invGrid" id="invGrid"></div>
+        <div class="btnrow" style="margin-top:20px;">
+          <button class="btn alt" id="closeInv">Geri Dön</button>
+          <button class="btn" id="sortInv">Nadirliğe Göre Diz</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upgrade Cards Screen -->
+    <div class="screen hide cards" id="cards">
+      <div class="modal pixel-box cardWrap" style="background: transparent; border: none; box-shadow: none;">
+        <h2>SEVİYE ATLANDI! BİR GÜÇ SEÇ</h2>
+        <div class="upgradeGrid" id="upgradeGrid"></div>
+      </div>
+    </div>
+
+    <!-- Global Toast -->
+    <div class="toast" id="toast">BİLDİRİM MESAJI</div>
+
+    <button class="btn alt menuBtn" id="menuBtn" style="display: none;">DURAKLAT / MENÜ</button>
+    
+    <!-- Mobile D-Pad -->
+    <div class="mobilePad" id="mobilePad" style="display: none;">
+      <button class="padBtn" data-dir="up">▲</button>
+      <button class="padBtn" data-dir="left">◀</button>
+      <button class="padBtn" data-dir="pause">■</button>
+      <button class="padBtn" data-dir="right">▶</button>
+      <button class="padBtn" data-dir="down">▼</button>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+const canvas = $('game'), ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false; // Pixel art look strictly enforced
+let W = window.innerWidth, H = window.innerHeight;
+
+// --- YENİ ASSET YÜKLEME SİSTEMİ ---
+const ASSET_URL = 'https://raw.githubusercontent.com/umuttis21-dev/PixelChaos-Arena-mage-Asset/main/';
+const imgNames = [
+  'player_ship_01', 'player_ship_02', 'player_ship_03', 'player_ship_04', 'player_ship_05',
+  'engine_flame_01', 'engine_flame_02', 'engine_flame_03', 'engine_flame_04', 'engine_flame_05', 'engine_flame_06', 'engine_flame_07',
+  'enemy_bat_black', 'enemy_spider_gray', 'enemy_red_wing', 'enemy_moth_purple', 'enemy_green_tank', 'enemy_red_boss', 'enemy_purple_boss', 'enemy_gray_boss',
+  'wood_chest', 'silver_chest', 'gold_chest', 'purple_chest', 'red_gold_chest',
+  'green_bullet', 'blue_small', 'orange_bullet', 'purple_orb',
+  'heart', 'coin_icon', 'skull_icon', 'purple_gem_icon', 'star', 'blue_medium',
+  'attack_card', 'crit_card', 'hp_card', 'shield_card', 'speed_card', 'xp_card',
+  'energy_bolt', 'ice_burst', 'crossed_swords_icon', 'settings_icon'
+];
+const IMAGES = {};
+imgNames.forEach(name => {
+  const img = new Image();
+  img.src = ASSET_URL + name + '.png';
+  IMAGES[name] = img;
+});
+
+function drawSprite(img, x, y, size, angle = 0) {
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (angle !== 0) ctx.rotate(angle);
+    ctx.drawImage(img, -size/2, -size/2, size, size);
+    ctx.restore();
+  } else {
+    // Fallback drawing if image not loaded yet
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - size/2, y - size/2, size, size);
+  }
+}
+// ------------------------------------
+
+// Responsive Canvas Resize handling
+function resizeCanvas() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas(); // init
+
+const mainScreen = $('mainScreen'), shopScreen = $('shopScreen'), 
+      invScreen = $('invScreen'), cards = $('cards'), upgradeGrid = $('upgradeGrid'), 
+      shopGrid = $('shopGrid'), invGrid = $('invGrid'), toast = $('toast'),
+      pauseOverlay = $('pauseOverlay');
+
+// UI Elements Visibility Toggles
+const gameUIs = [$('topBars'), $('liveHud'), $('topStatus'), $('hotbar'), $('menuBtn')];
+if (window.innerWidth <= 1000) gameUIs.push($('mobilePad'));
+
+const ui = {
+  level: $('level'), hpTxt: $('hpTxt'), hpBar: $('hpBar'), 
+  xpTxt: $('xpTxt'), xpBar: $('xpBar'), status: $('status'),
+  liveWave: $('liveWave'), liveScore: $('liveScore'), liveCoins: $('liveCoins'), 
+  liveKills: $('liveKills'), liveItems: $('liveItems'), menuCoins: $('menuCoins'), menuItems: $('menuItems'),
+  h1: $('h1'), h2: $('h2'), h3: $('h3')
+};
+
+let keys = {}, running = false, paused = false, choosing = false;
+let timer = null, last = 0, spawnTimer = 0, shootTimer = 0, waveTimer = 0;
+let score = 0, kills = 0, wave = 1, shake = 0, sessionCoins = 0;
+let player, enemies, bullets, xps, particles, floatTexts, drops, drones;
+
+const saveKey = 'pixelChaosArenaSaveRevampFullscreen';
+let meta = { coins: 0, best: 0, owned: { hp: 0, damage: 0, magnet: 0, luck: 0 }, inventory: [] };
+
+const rarity = {
+  common: { name: 'Standart', color: 'common', hex: '#a0aab5', coin: 8, chance: 0.62 },
+  rare:   { name: 'Nadir', color: 'rare', hex: '#0088ff', coin: 22, chance: 0.25 },
+  epic:   { name: 'Epik', color: 'epic', hex: '#aa00ff', coin: 65, chance: 0.09 },
+  legend: { name: 'Efsanevi', color: 'legend', hex: '#ffcc00', coin: 160, chance: 0.032 },
+  mythic: { name: 'Mitik', color: 'mythic', hex: '#ff0055', coin: 420, chance: 0.008 }
+};
+
+const itemNames = ['Kırık Çip', 'Neon Batarya', 'Plazma Çekirdek', 'Drone Lens', 'Kalkan Parçası', 'Kaos Kristali', 'Eski Modül', 'Rünlü Kartuş', 'Altın Dişli', 'XP Mıknatısı'];
+
+const upgrades = [
+ { icon: 'attack_card', name: 'ÇİFT NAMLU', desc: 'Mermi sayısını artırır.', apply: p => p.multi = Math.min(6, p.multi + 1) },
+ { icon: 'speed_card', name: 'ATEŞ HIZI', desc: 'Silah daha sık ateş eder.', apply: p => p.fireRate *= 0.84 },
+ { icon: 'crit_card', name: 'HASAR ÇEKİRDEĞİ', desc: 'Temel hasar artar.', apply: p => p.damage += 7 },
+ { icon: 'xp_card', name: 'XP MIKNATISI', desc: 'XP toplama alanı büyür.', apply: p => p.magnet += 45 },
+ { icon: 'shield_card', name: 'ZIRH PROTOKOLÜ', desc: 'HP ve hasar azaltma artar.', apply: p => { p.maxHp += 20; p.hp += 35; p.armor += 0.04; } },
+ { icon: 'purple_orb', name: 'DRONE YUVASI', desc: 'Oto-ateş eden drone ekler.', apply: p => { p.drones++; spawnDrone(); } },
+ { icon: 'ice_burst', name: 'BUZ MERMİSİ', desc: 'Mermiler düşmanı yavaşlatır.', apply: p => p.freeze = true },
+ { icon: 'energy_bolt', name: 'YANMA MODÜLÜ', desc: 'Mermi yanma hasarı verir.', apply: p => p.burn += 2 },
+ { icon: 'coin_icon', name: 'TİCARET ALGORİTMASI', desc: 'Coin düşüşü artar.', apply: p => p.coinMult += 0.25 },
+ { icon: 'star', name: 'ŞANS ARTIŞI', desc: 'Nadir drop ihtimali artar.', apply: p => p.luck += 0.18 }
+];
+
+const shopItems = [
+ { id: 'hp', name: 'KALICI HP', desc: '+10 başlangıç HP', base: 80, apply: () => meta.owned.hp++ },
+ { id: 'damage', name: 'KALICI HASAR', desc: '+2 başlangıç hasarı', base: 95, apply: () => meta.owned.damage++ },
+ { id: 'magnet', name: 'KALICI MIKNATIS', desc: '+10 XP çekim alanı', base: 70, apply: () => meta.owned.magnet++ },
+ { id: 'luck', name: 'KALICI ŞANS', desc: '+%3 nadir drop şansı', base: 120, apply: () => meta.owned.luck++ }
+];
+
+// Utilities
+function rand(n) { return Math.floor(Math.random() * n); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function angle(a, b) { return Math.atan2(b.y - a.y, b.x - a.x); }
+function pick(arr) { return arr[rand(arr.length)]; }
+
+function load() {
+  try {
+    meta = { ...meta, ...JSON.parse(localStorage.getItem(saveKey) || '{}') };
+    meta.owned = { hp: 0, damage: 0, magnet: 0, luck: 0, ...meta.owned };
+    meta.inventory = meta.inventory || [];
+  } catch (e) {}
+  updateMetaUi();
+}
+
+function save() {
+  localStorage.setItem(saveKey, JSON.stringify(meta));
+  notify('OYUN KAYDEDİLDİ');
+}
+
+function updateMetaUi() {
+  ui.menuCoins.textContent = meta.coins;
+  ui.menuItems.textContent = meta.inventory.length;
+}
+
+function showGameUIs(show) {
+  gameUIs.forEach(el => {
+    if(el) el.style.display = show ? (el.id === 'topBars' || el.id === 'liveHud' || el.id === 'hotbar' ? 'flex' : 'block') : 'none';
+  });
+  if (window.innerWidth <= 1000 && show) {
+     $('mobilePad').style.display = 'grid';
+     $('topStatus').style.display = 'none'; // Keep hidden on mobile
+  }
+}
+
+function resetRun() {
+  score = 0; kills = 0; wave = 1; shake = 0; sessionCoins = 0;
+  spawnTimer = 0; shootTimer = 0; waveTimer = 0; keys = {};
+  
+  player = {
+    x: W / 2, y: H / 2, r: 16,
+    hp: 100 + meta.owned.hp * 10, maxHp: 100 + meta.owned.hp * 10,
+    xp: 0, nextXp: 100, level: 1, speed: 3.5, fireRate: 300,
+    damage: 18 + meta.owned.damage * 2, magnet: 100 + meta.owned.magnet * 10,
+    multi: 1, armor: 0, drones: 0, freeze: false, burn: 0,
+    coinMult: 1, luck: meta.owned.luck * 0.03, inv: 0,
+    powers: { nova: 0, shield: 0, drone: 0 }
+  };
+  
+  enemies = []; bullets = []; xps = []; particles = []; floatTexts = []; drops = []; drones = [];
+  for (let i = 0; i < 10; i++) spawnEnemy(false);
+  draw(); updateUi();
+}
+
+function start() {
+  resetRun();
+  running = true; paused = false; choosing = false;
+  
+  mainScreen.classList.add('hide');
+  shopScreen.classList.add('hide');
+  invScreen.classList.add('hide');
+  cards.classList.add('hide');
+  pauseOverlay.classList.remove('show');
+  
+  showGameUIs(true);
+  
+  last = performance.now();
+  cancelAnimationFrame(timer);
+  timer = requestAnimationFrame(frame);
+  notify('DALGA 1 BAŞLADI');
+}
+
+function end(win = false) {
+  running = false;
+  showGameUIs(false);
+  cancelAnimationFrame(timer);
+  
+  meta.coins += sessionCoins;
+  meta.best = Math.max(meta.best, score);
+  save();
+  
+  mainScreen.classList.remove('hide');
+  mainScreen.querySelector('h2').textContent = win ? '100 DALGA TEMİZLENDİ!' : 'RUN BİTTİ';
+  mainScreen.querySelector('p').innerHTML = `Skor: <strong style="color:var(--neon-green)">${score}</strong> | Kill: <strong>${kills}</strong> | Dalga: <strong>${wave}/100</strong><br>Kazanılan Coin: <strong style="color:var(--neon-yellow)">+${sessionCoins}</strong>`;
+  updateMetaUi();
+}
+
+function togglePause() {
+  if (!running || choosing) return;
+  paused = !paused;
+  if (paused) {
+    pauseOverlay.classList.add('show');
+  } else {
+    pauseOverlay.classList.remove('show');
+    last = performance.now(); // reset time to prevent jumps
+  }
+  updateUi();
+}
+
+function frame(now) {
+  const dt = Math.min(33, now - last);
+  last = now;
+  if (running && !paused && !choosing) {
+    update(dt);
+    draw();
+  }
+  timer = requestAnimationFrame(frame);
+}
+
+function update(dt) {
+  waveTimer += dt; spawnTimer += dt; shootTimer += dt;
+  player.inv = Math.max(0, player.inv - dt);
+  
+  for (const k of Object.keys(player.powers)) {
+    player.powers[k] = Math.max(0, player.powers[k] - dt);
+  }
+  
+  movePlayer(); waveLogic(); spawnLogic(); shootLogic();
+  moveBullets(); moveEnemies(dt); moveDrones(dt);
+  collectXp(); collectDrops(); moveEffects();
+  updateUi();
+}
+
+function waveLogic() {
+  if (waveTimer > 18000) { // Her 18 saniyede bir yeni dalga
+    waveTimer = 0; wave++;
+    notify(`DALGA ${wave}/100`);
+    if (wave > 100) end(true);
+    for (let i = 0; i < Math.min(12, 2 + Math.floor(wave / 6)); i++) spawnEnemy(wave % 10 === 0 && i === 0);
+  }
+}
+
+function spawnLogic() {
+  const delay = Math.max(150, 800 - wave * 6);
+  if (spawnTimer > delay) {
+    spawnTimer = 0;
+    for (let i = 0; i < 1 + Math.floor(wave / 12); i++) spawnEnemy(false);
+  }
+}
+
+function spawnEnemy(boss = false) {
+  const side = rand(4);
+  let x = side === 0 ? -40 : side === 1 ? W + 40 : rand(W);
+  let y = side === 2 ? -40 : side === 3 ? H + 40 : rand(H);
+  
+  const elite = !boss && Math.random() < 0.05 + wave * 0.003;
+  const hp = boss ? 1000 + wave * 90 : elite ? 180 + wave * 25 : 50 + wave * 10;
+  
+  const bossSprites = ['enemy_red_boss', 'enemy_purple_boss', 'enemy_gray_boss'];
+  const eliteSprites = ['enemy_moth_purple', 'enemy_red_wing', 'enemy_green_tank'];
+  const normalSprites = ['enemy_bat_black', 'enemy_spider_gray'];
+  const sprite = boss ? pick(bossSprites) : elite ? pick(eliteSprites) : pick(normalSprites);
+
+  enemies.push({
+    x, y, r: boss ? 34 : elite ? 22 : 14,
+    hp, maxHp: hp, sprite: sprite,
+    speed: boss ? 1.1 : elite ? 1.6 : 1.3 + Math.min(1.8, wave * 0.02),
+    damage: boss ? 35 + wave * 0.4 : elite ? 20 : 12,
+    boss, elite, slow: 0, burn: 0
+  });
+}
+
+function movePlayer() {
+  let dx = (keys.d || keys.ArrowRight ? 1 : 0) - (keys.a || keys.ArrowLeft ? 1 : 0);
+  let dy = (keys.s || keys.ArrowDown ? 1 : 0) - (keys.w || keys.ArrowUp ? 1 : 0);
+  if (dx || dy) {
+    const l = Math.hypot(dx, dy); dx /= l; dy /= l;
+  }
+  player.x = clamp(player.x + dx * player.speed, player.r, W - player.r);
+  player.y = clamp(player.y + dy * player.speed, player.r, H - player.r);
+}
+
+function nearestEnemy(from = player) {
+  let best = null, d = Infinity;
+  for (const e of enemies) {
+    const nd = dist(from, e);
+    if (nd < d) { best = e; d = nd; }
+  }
+  return best;
+}
+
+function shootLogic() {
+  if (shootTimer < player.fireRate) return;
+  const target = nearestEnemy();
+  if (!target) return;
+  shootTimer = 0;
+  fireFrom(player.x, player.y, target, player.damage, player.multi);
+}
+
+function fireFrom(x, y, target, damage, multi = 1) {
+  const base = Math.atan2(target.y - y, target.x - x);
+  const spread = multi === 1 ? [0] : Array.from({ length: multi }, (_, i) => (i - (multi - 1) / 2) * 0.18);
+  for (const s of spread) {
+    bullets.push({
+      x, y, vx: Math.cos(base + s) * 9, vy: Math.sin(base + s) * 9,
+      r: 6, life: 100, damage, freeze: player.freeze, burn: player.burn
+    });
+  }
+}
+
+function moveBullets() {
+  bullets = bullets.filter(b => --b.life > 0 && b.x > -50 && b.y > -50 && b.x < W + 50 && b.y < H + 50);
+  for (const b of bullets) {
+    b.x += b.vx; b.y += b.vy;
+    for (const e of [...enemies]) {
+      if (dist(b, e) < b.r + e.r) {
+        hitEnemy(e, b.damage, b);
+        b.life = 0; break;
+      }
+    }
+  }
+}
+
+function hitEnemy(e, dmg, b = null) {
+  e.hp -= dmg;
+  if (b?.freeze) e.slow = 1000;
+  if (b?.burn) e.burn = Math.max(e.burn, 1800);
+  burst(e.x, e.y, '#fff', 3);
+  if (e.hp <= 0) killEnemy(e);
+}
+
+function killEnemy(e) {
+  const i = enemies.indexOf(e); if (i < 0) return;
+  enemies.splice(i, 1);
+  kills++; score += e.boss ? 800 : e.elite ? 150 : 40;
+  
+  const coin = Math.ceil((e.boss ? 70 : e.elite ? 20 : 5) * player.coinMult);
+  sessionCoins += coin;
+  floatText(e.x, e.y, '+' + coin, '#ffe600');
+  
+  const xpN = e.boss ? 25 : e.elite ? 10 : 3;
+  for (let n = 0; n < xpN; n++) {
+    xps.push({ x: e.x + rand(40) - 20, y: e.y + rand(40) - 20, value: e.boss ? 35 : e.elite ? 18 : 12, r: e.boss ? 7 : 5 });
+  }
+  
+  if (Math.random() < dropChance(e)) drops.push(makeDrop(e.x, e.y));
+  burst(e.x, e.y, e.color, 20);
+}
+
+function dropChance(e) { return (e.boss ? 0.9 : e.elite ? 0.3 : 0.05) + player.luck; }
+
+function rollRarity() {
+  let r = Math.random() - player.luck * 0.3;
+  if (r < rarity.mythic.chance) return 'mythic';
+  if (r < rarity.mythic.chance + rarity.legend.chance) return 'legend';
+  if (r < 0.15) return 'epic';
+  if (r < 0.40) return 'rare';
+  return 'common';
+}
+
+function makeDrop(x, y) {
+  const key = rollRarity();
+  return { x, y, r: 9, rarity: key, name: pick(itemNames), value: rarity[key].coin + rand(rarity[key].coin), id: Date.now() + Math.random() };
+}
+
+function moveEnemies(dt) {
+  for (const e of [...enemies]) {
+    if (e.burn > 0) {
+      e.burn -= dt; e.hp -= 0.2;
+      if (Math.random() < 0.1) burst(e.x, e.y, '#ff6a00', 1);
+      if (e.hp <= 0) { killEnemy(e); continue; }
+    }
+    const a = angle(e, player), slow = e.slow > 0 ? 0.4 : 1;
+    e.slow = Math.max(0, e.slow - dt);
+    e.x += Math.cos(a) * e.speed * slow;
+    e.y += Math.sin(a) * e.speed * slow;
+    
+    // Player Collision
+    if (dist(e, player) < e.r + player.r && player.inv <= 0) {
+      const dmg = Math.ceil(e.damage * (1 - player.armor));
+      player.hp -= dmg;
+      player.inv = 500;
+      shake = 10;
+      floatText(player.x, player.y - 20, '-' + dmg, '#ff003c');
+      if (player.hp <= 0) { end(false); return; }
+    }
+  }
+}
+
+function spawnDrone() { drones.push({ x: player.x, y: player.y, ang: Math.random() * 6.28, shoot: 0 }); }
+
+function moveDrones(dt) {
+  for (const d of drones) {
+    d.ang += 0.03;
+    d.x = player.x + Math.cos(d.ang) * 65;
+    d.y = player.y + Math.sin(d.ang) * 65;
+    d.shoot += dt;
+    if (d.shoot > 450) {
+      const t = nearestEnemy(d);
+      if (t) { fireFrom(d.x, d.y, t, player.damage * 0.6, 1); d.shoot = 0; }
+    }
+  }
+}
+
+function collectXp() {
+  for (const xp of xps) {
+    if (dist(player, xp) < player.magnet) {
+      const a = angle(xp, player);
+      xp.x += Math.cos(a) * 7; xp.y += Math.sin(a) * 7;
+    }
+    if (dist(player, xp) < player.r + xp.r) {
+      player.xp += xp.value; xp.dead = true;
+      burst(xp.x, xp.y, '#00f0ff', 4);
+      if (player.xp >= player.nextXp) levelUp();
+    }
+  }
+  xps = xps.filter(x => !x.dead);
+}
+
+function collectDrops() {
+  for (const d of drops) {
+    if (dist(player, d) < player.magnet * 0.75) {
+      const a = angle(d, player);
+      d.x += Math.cos(a) * 4.5; d.y += Math.sin(a) * 4.5;
+    }
+    if (dist(player, d) < player.r + d.r) {
+      meta.inventory.push({ name: d.name, rarity: d.rarity, value: d.value });
+      d.dead = true;
+      notify(`${rarity[d.rarity].name.toUpperCase()} DROP: ${d.name}`);
+    }
+  }
+  drops = drops.filter(d => !d.dead);
+}
+
+function levelUp() {
+  player.xp -= player.nextXp;
+  player.level++;
+  player.nextXp = Math.floor(player.nextXp * 1.3 + 50);
+  choosing = true;
+  cards.classList.remove('hide');
+  renderCards();
+  updateUi();
+}
+
+function renderCards() {
+  const pool = [...upgrades].sort(() => Math.random() - 0.5).slice(0, 3);
+  upgradeGrid.innerHTML = pool.map((u, i) => `
+    <div class="upgrade" data-i="${i}">
+      <div class="icon"><img src="${ASSET_URL + u.icon}.png" alt="icon"></div>
+      <b>${u.name}</b>
+      <p>${u.desc}</p>
+      <em>Tıkla ve Seç</em>
+    </div>
+  `).join('');
+  
+  upgradeGrid.querySelectorAll('.upgrade').forEach((btn, i) => btn.onclick = () => {
+    pool[i].apply(player);
+    choosing = false;
+    cards.classList.add('hide');
+    last = performance.now();
+    notify(`SEÇİLDİ: ${pool[i].name}`);
+    updateUi();
+  });
+}
+
+function usePower(n) {
+  if (!running || paused || choosing) return;
+  if (n === 1 && player.powers.nova <= 0) {
+    for (const e of [...enemies]) if (dist(player, e) < 180) hitEnemy(e, 150);
+    player.powers.nova = 12000; shake = 15; notify('NOVA PATLAMASI!');
+    // Nova effect burst
+    for(let i=0; i<30; i++) burst(player.x, player.y, '#00f0ff', 2);
+  }
+  if (n === 2 && player.powers.shield <= 0) {
+    player.inv = 4000; player.powers.shield = 18000; notify('KALKAN AKTİF');
+  }
+  if (n === 3 && player.powers.drone <= 0) {
+    spawnDrone(); player.powers.drone = 24000; notify('DESTEK DRONE');
+  }
+  if (n === 4) openShop();
+}
+
+function renderShop() {
+  shopGrid.innerHTML = shopItems.map(s => {
+    const lvl = meta.owned[s.id] || 0, cost = s.base + lvl * s.base;
+    return `
+      <div class="shopItem" data-id="${s.id}">
+        <b style="color:var(--neon-blue)">${s.name} (Lv.${lvl})</b>
+        <small>${s.desc}</small>
+        <div class="price">${cost} COIN</div>
+      </div>
+    `;
+  }).join('');
+  
+  shopGrid.querySelectorAll('.shopItem').forEach(btn => btn.onclick = () => {
+    const s = shopItems.find(x => x.id === btn.dataset.id);
+    const lvl = meta.owned[s.id] || 0, cost = s.base + lvl * s.base;
+    if (meta.coins >= cost) {
+      meta.coins -= cost; s.apply(); save(); renderShop(); updateMetaUi();
+      notify('SATIN ALINDI: ' + s.name);
+    } else notify('YETERSİZ COIN!');
+  });
+}
+
+function renderInv() {
+  if (!meta.inventory.length) {
+    invGrid.innerHTML = '<div style="color:var(--text-muted); font-size:16px;">Çanta boş. Oynayarak drop topla.</div>';
+    return;
+  }
+  invGrid.innerHTML = meta.inventory.map((it, i) => `
+    <div class="invItem rarity-${it.rarity}" data-i="${i}">
+      <b style="color:${rarity[it.rarity].hex}">${it.name}</b>
+      <small>${rarity[it.rarity].name.toUpperCase()}</small>
+      <div class="price">SAT: ${it.value} COIN</div>
+    </div>
+  `).join('');
+  
+  invGrid.querySelectorAll('.invItem').forEach(btn => btn.onclick = () => {
+    const i = Number(btn.dataset.i), it = meta.inventory.splice(i, 1)[0];
+    meta.coins += it.value; save(); renderInv(); updateMetaUi();
+    notify(`${it.name} SATILDI (+${it.value})`);
+  });
+}
+
+function openShop() { 
+  if(running) paused = true; 
+  shopScreen.classList.remove('hide'); 
+  renderShop(); updateMetaUi(); 
+}
+
+function openInv() { 
+  if(running) paused = true; 
+  invScreen.classList.remove('hide'); 
+  renderInv(); updateMetaUi();
+}
+
+function closePanels() { 
+  if(running && paused) paused = false; 
+  shopScreen.classList.add('hide'); 
+  invScreen.classList.add('hide'); 
+  last = performance.now(); 
+}
+
+function updateUi() {
+  if(!running) return;
+  
+  ui.level.textContent = player.level;
+  
+  ui.hpTxt.textContent = `${Math.max(0, Math.ceil(player.hp))}/${player.maxHp}`;
+  ui.hpBar.style.width = (player.hp / player.maxHp * 100) + '%';
+  
+  ui.xpTxt.textContent = `${Math.floor(player.xp)}/${player.nextXp}`;
+  ui.xpBar.style.width = (player.xp / player.nextXp * 100) + '%';
+  
+  ui.liveWave.textContent = wave + '/100';
+  ui.liveScore.textContent = score;
+  ui.liveCoins.textContent = meta.coins + sessionCoins;
+  ui.liveKills.textContent = kills;
+  ui.liveItems.textContent = meta.inventory.length;
+  
+  ui.status.textContent = paused ? 'Duraklatıldı' : choosing ? 'Seviye Atlandı' : `Dalga ${wave} | Düşman: ${enemies.length}`;
+  
+  setHot(ui.h1, player.powers.nova, 12000); setHot(ui.h2, player.powers.shield, 18000); setHot(ui.h3, player.powers.drone, 24000);
+}
+
+function setHot(el, cd, max) {
+  el.classList.toggle('ready', cd <= 0); el.classList.toggle('cool', cd > 0);
+  el.style.setProperty('--cd', (cd / max * 100) + '%');
+}
+
+function notify(text) {
+  toast.textContent = text;
+  toast.classList.add('show');
+  clearTimeout(notify.t);
+  notify.t = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function burst(x, y, c, n) {
+  for (let i = 0; i < n; i++) particles.push({ x, y, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, life: 30, c });
+}
+
+function floatText(x, y, text, color = '#e0e5ff') {
+  floatTexts.push({ x, y, text, color, life: 50 });
+}
+
+function moveEffects() {
+  particles = particles.filter(p => p.life-- > 0);
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vx *= 0.9; p.vy *= 0.9; });
+  floatTexts = floatTexts.filter(t => t.life-- > 0);
+  floatTexts.forEach(t => t.y -= 0.6);
+}
+
+// -------------------------
+// Drawing Functions
+// -------------------------
+function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+
+function drawGrid() {
+  ctx.fillStyle = 'rgba(11, 13, 23, 1)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.05)';
+  ctx.lineWidth = 2;
+  
+  // Start drawing relative to player position for a moving background illusion
+  const offsetX = -player.x * 0.1;
+  const offsetY = -player.y * 0.1;
+  
+  ctx.save();
+  ctx.translate(offsetX % 40, offsetY % 40);
+  for (let x = -40; x < W + 40; x += 40) { ctx.beginPath(); ctx.moveTo(x, -40); ctx.lineTo(x, H + 40); ctx.stroke(); }
+  for (let y = -40; y < H + 40; y += 40) { ctx.beginPath(); ctx.moveTo(-40, y); ctx.lineTo(W + 40, y); ctx.stroke(); }
+  ctx.restore();
+}
+
+function draw() {
+  ctx.save();
+  if (shake > 0) { ctx.translate((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12); shake--; }
+  drawGrid();
+  
+  // XPs
+  xps.forEach(x => {
+    drawSprite(x.value > 15 ? IMAGES['blue_medium'] : IMAGES['star'], x.x, x.y, x.r * 3);
+  });
+  
+  // Drops
+  const rarityChests = {
+    common: 'wood_chest', rare: 'silver_chest', epic: 'gold_chest',
+    legend: 'purple_chest', mythic: 'red_gold_chest'
+  };
+  drops.forEach(d => {
+    drawSprite(IMAGES[rarityChests[d.rarity]], d.x, d.y, d.r * 3);
+  });
+  
+  // Bullets
+  bullets.forEach(b => {
+    const sprite = b.freeze ? IMAGES['blue_small'] : b.burn ? IMAGES['orange_bullet'] : IMAGES['green_bullet'];
+    const angle = Math.atan2(b.vy, b.vx);
+    drawSprite(sprite, b.x, b.y, b.r * 4, angle + Math.PI/2); // Rotated to face direction
+  });
+  
+  // Enemies
+  enemies.forEach(drawEnemy);
+  
+  // Drones
+  drones.forEach(d => {
+    drawSprite(IMAGES['purple_orb'], d.x, d.y, 24, d.ang);
+  });
+  
+  drawPlayer();
+  
+  // Particles
+  particles.forEach(p => rect(p.x, p.y, 4, 4, p.c));
+  
+  // Floating Texts
+  ctx.font = '16px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  floatTexts.forEach(t => {
+    ctx.fillStyle = '#000';
+    ctx.fillText(t.text, t.x + 2, t.y + 2); // shadow
+    ctx.fillStyle = t.color;
+    ctx.fillText(t.text, t.x, t.y);
+  });
+  
+  ctx.restore();
+}
+
+function drawPlayer() {
+  const x = player.x, y = player.y, r = player.r;
+  // Shadow
+  rect(x - r + 4, y - r + 4, r * 2, r * 2, 'rgba(0,0,0,0.5)');
+  
+  // Animation frames based on time
+  const pFrame = Math.floor(Date.now() / 150) % 5 + 1;
+  const fFrame = Math.floor(Date.now() / 80) % 7 + 1;
+  
+  // Engine Flame
+  drawSprite(IMAGES['engine_flame_0' + fFrame], x, y + r + 10, r * 2.5);
+  
+  // Player Ship
+  drawSprite(IMAGES['player_ship_0' + pFrame], x, y, r * 3);
+  
+  // Shield Visual
+  if (player.inv > 0 || player.powers.shield > 0) {
+    ctx.strokeStyle = player.powers.shield > 0 ? '#00f0ff' : '#ff003c';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([8, 8]);
+    ctx.strokeRect(x - r - 8, y - r - 8, r * 2 + 16, r * 2 + 16);
+    ctx.setLineDash([]);
+  }
+}
+
+function drawEnemy(e) {
+  const r = e.r;
+  // Shadow
+  rect(e.x - r + 4, e.y - r + 4, r * 2, r * 2, 'rgba(0,0,0,0.5)');
+  
+  // Image
+  drawSprite(IMAGES[e.sprite], e.x, e.y, r * 2.8);
+  
+  if (e.boss) drawSprite(IMAGES['skull_icon'], e.x, e.y - r - 20, 20);
+  
+  // Health bar above enemy
+  if (e.hp < e.maxHp) {
+    const w = r * 2;
+    rect(e.x - r, e.y - r - 10, w, 6, '#111');
+    rect(e.x - r + 1, e.y - r - 9, (w - 2) * (e.hp / e.maxHp), 4, '#39ff14');
+  }
+}
+
+// -------------------------
+// Input Listeners
+// -------------------------
+window.addEventListener('keydown', e => {
+  keys[e.key] = true; keys[e.key.toLowerCase()] = true;
+  
+  if (e.key === '1') usePower(1);
+  if (e.key === '2') usePower(2);
+  if (e.key === '3') usePower(3);
+  if (e.key === '4') usePower(4);
+  
+  if (e.key === ' ' || e.key.toLowerCase() === 'p') {
+    e.preventDefault();
+    if (!running) start();
+    else togglePause();
+  }
+  if (e.key === 'Escape' && running) togglePause();
+});
+
+window.addEventListener('keyup', e => {
+  keys[e.key] = false; keys[e.key.toLowerCase()] = false;
+});
+
+// UI Buttons Binding
+$('menuStart').onclick = start;
+$('menuShop').onclick = openShop;
+$('menuInv').onclick = openInv;
+$('menuLoad').onclick = () => { load(); notify('KAYIT YÜKLENDİ'); };
+
+$('closeShop').onclick = closePanels; $('closeInv').onclick = closePanels;
+
+$('resumeBtn').onclick = togglePause;
+$('quitBtn').onclick = () => { end(false); togglePause(); };
+
+$('menuBtn').onclick = () => { if (running) togglePause(); else closePanels(); };
+
+$('sellAll').onclick = () => {
+  if (meta.inventory.length === 0) return notify('ÇANTA BOŞ');
+  const sum = meta.inventory.reduce((a, b) => a + b.value, 0);
+  meta.coins += sum; meta.inventory = [];
+  save(); renderShop(); updateMetaUi(); notify(`TÜMÜ SATILDI (+${sum} COIN)`);
+};
+
+$('sortInv').onclick = () => {
+  const order = { mythic: 5, legend: 4, epic: 3, rare: 2, common: 1 };
+  meta.inventory.sort((a, b) => order[b.rarity] - order[a.rarity]);
+  renderInv();
+};
+
+// Mobile D-Pad
+document.querySelectorAll('.padBtn').forEach(b => {
+  b.addEventListener('touchstart', (ev) => {
+    ev.preventDefault();
+    const d = b.dataset.dir;
+    if (d === 'pause') { togglePause(); return; }
+    if (d === 'up') keys.w = true;
+    if (d === 'down') keys.s = true;
+    if (d === 'left') keys.a = true;
+    if (d === 'right') keys.d = true;
+  });
+  b.addEventListener('touchend', (ev) => {
+    ev.preventDefault();
+    const d = b.dataset.dir;
+    if (d === 'up') keys.w = false;
+    if (d === 'down') keys.s = false;
+    if (d === 'left') keys.a = false;
+    if (d === 'right') keys.d = false;
+  });
+});
+
+window.addEventListener('error', e => {
+  notify('Sistem Hatası!'); console.error(e.error || e.message);
+});
+
+// Initial Setup
+load();
+updateMetaUi();
+</script>
+</body>
+</html>
